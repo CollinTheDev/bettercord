@@ -1,7 +1,7 @@
 // js/app.js
 document.addEventListener('DOMContentLoaded', () => {
   const loginPage = document.getElementById('login-page');
-  const chatPage = document.getElementById('chat-page');
+  const mainPage = document.getElementById('main-page');
   const loginButton = document.getElementById('login-button');
   const signupButton = document.getElementById('signup-button');
   const logoutButton = document.getElementById('logout-button');
@@ -9,14 +9,33 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginPassword = document.getElementById('login-password');
   const messageInput = document.getElementById('message-input');
   const sendButton = document.getElementById('send-button');
-  const messagesContainer = document.getElementById('messages');
+  const messagesContainer = document.getElementById('messages-container');
+  const channelList = document.getElementById('channel-list');
+  const channelTitle = document.getElementById('channel-title');
 
   let currentUser;
+  let currentChannel = 'general';
 
   const showPage = (page) => {
     loginPage.classList.add('hidden');
-    chatPage.classList.add('hidden');
+    mainPage.classList.add('hidden');
     page.classList.remove('hidden');
+  };
+
+  const addMessage = (messageData) => {
+    const messageElement = document.createElement('div');
+    messageElement.textContent = `${messageData.user}: ${messageData.text}`;
+    messagesContainer.appendChild(messageElement);
+  };
+
+  const loadMessages = (channel) => {
+    db.collection('channels').doc(channel).collection('messages').orderBy('timestamp', 'asc').onSnapshot((snapshot) => {
+      messagesContainer.innerHTML = '';
+      snapshot.forEach((doc) => {
+        const messageData = doc.data();
+        addMessage(messageData);
+      });
+    });
   };
 
   loginButton.addEventListener('click', () => {
@@ -25,8 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
     auth.signInWithEmailAndPassword(email, password)
       .then((userCredential) => {
         currentUser = userCredential.user;
-        showPage(chatPage);
-        loadMessages();
+        showPage(mainPage);
+        loadMessages(currentChannel);
       })
       .catch((error) => {
         console.error('Error logging in:', error);
@@ -39,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     auth.createUserWithEmailAndPassword(email, password)
       .then((userCredential) => {
         currentUser = userCredential.user;
-        showPage(chatPage);
+        showPage(mainPage);
       })
       .catch((error) => {
         console.error('Error signing up:', error);
@@ -60,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
   sendButton.addEventListener('click', () => {
     const message = messageInput.value;
     if (message.trim() !== '') {
-      db.collection('messages').add({
+      db.collection('channels').doc(currentChannel).collection('messages').add({
         text: message,
         user: currentUser.email,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -69,26 +88,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  const loadMessages = () => {
-    db.collection('messages').orderBy('timestamp', 'asc').onSnapshot((snapshot) => {
-      messagesContainer.innerHTML = '';
-      snapshot.forEach((doc) => {
-        const messageData = doc.data();
-        const messageElement = document.createElement('div');
-        messageElement.textContent = `${messageData.user}: ${messageData.text}`;
-        messagesContainer.appendChild(messageElement);
-      });
-    });
-  };
+  channelList.addEventListener('click', (event) => {
+    if (event.target.tagName === 'LI') {
+      currentChannel = event.target.dataset.channel;
+      channelTitle.textContent = currentChannel;
+      loadMessages(currentChannel);
+    }
+  });
 
   auth.onAuthStateChanged((user) => {
     if (user) {
       currentUser = user;
-      showPage(chatPage);
-      loadMessages();
+      showPage(mainPage);
+      loadMessages(currentChannel);
     } else {
       currentUser = null;
       showPage(loginPage);
     }
   });
+
+  const initializeChannels = () => {
+    db.collection('channels').get().then((snapshot) => {
+      snapshot.forEach((doc) => {
+        const channelElement = document.createElement('li');
+        channelElement.textContent = doc.id;
+        channelElement.dataset.channel = doc.id;
+        channelList.appendChild(channelElement);
+      });
+    });
+  };
+
+  initializeChannels();
 });
